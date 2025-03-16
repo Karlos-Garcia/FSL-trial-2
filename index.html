@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Language Recognition</title>
+</head>
+<body>
+    <h1>Sign Language Recognition</h1>
+
+    <div class="canvas-container">
+        <!-- Left Side: Video Feed with Landmarks -->
+        <canvas id="outputCanvas" width="640" height="480"></canvas>
+
+        <!-- Right Side: Captured Image-->
+        <canvas id="capturedCanvas" width="224" height="224"></canvas>
+    </div>
+
+    <div class="button-container">
+        <button onclick="captureHand()">Capture</button>
+        <!-- <button onclick="document.getElementById('fileInput').click()">Import Image</button> -->
+        <!-- <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="importImage(event)"> -->
+        <button onclick="clearOutput()">Clear</button>
+        <button onclick="predict()">Predict</button>
+        <button onclick="downloadImage()">Download</button> <!-- New Download Button -->
+        <button onclick="captureAndDownload()">Capture & Download</button>
+        <button onclick="downloadNormalizedData()">Download Normalized Data</button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+
+    <script>
+        const canvas = document.getElementById('outputCanvas');
+        const ctx = canvas.getContext('2d');
+        const capturedCanvas = document.getElementById('capturedCanvas');
+        const capturedCtx = capturedCanvas.getContext('2d');
+
+        const video = document.createElement('video');  
+        video.setAttribute("autoplay", "");
+        video.setAttribute("playsinline", "");
+
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        let lastHandBox = null;
+
+        hands.onResults((results) => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+
+                //landmarks
+                drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 5 });
+                drawLandmarks(ctx, landmarks, { color: '#FF0000', lineWidth: 2 });
+
+                //bounding box
+                const xVals = landmarks.map(p => p.x * canvas.width);
+                const yVals = landmarks.map(p => p.y * canvas.height);
+                const minX = Math.min(...xVals);
+                const minY = Math.min(...yVals);
+                const maxX = Math.max(...xVals);
+                const maxY = Math.max(...yVals);
+
+                // Square Bounding Box
+                const width = maxX - minX;
+                const height = maxY - minY;
+                const squareSize = Math.max(width, height) + 45; // Add padding
+
+                // Center square region for bounding
+                const centerX = (minX + maxX) / 2;
+                const centerY = (minY + maxY) / 2;
+
+                lastHandBox = {
+                    x: Math.max(0, centerX - squareSize / 2),
+                    y: Math.max(0, centerY - squareSize / 2),
+                    size: Math.min(canvas.width, canvas.height, squareSize)
+                };
+
+                ctx.strokeStyle = "blue";
+                ctx.lineWidth = 3;
+                ctx.strokeRect(lastHandBox.x, lastHandBox.y, lastHandBox.size, lastHandBox.size);
+            }
+        });
+
+        async function startCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+
+            const camera = new Camera(video, {
+                onFrame: async () => {
+                    await hands.send({ image: video });
+                },
+                width: 640,
+                height: 480
+            });
+
+            camera.start();
+        }
+
+        function captureHand() {
+            if (!lastHandBox) return;
+
+            const squareSize = lastHandBox.size;
+            const sourceX = Math.max(0, lastHandBox.x);
+            const sourceY = Math.max(0, lastHandBox.y);
+
+            capturedCtx.clearRect(0, 0, capturedCanvas.width, capturedCanvas.height);
+
+            const scale = Math.min(
+                capturedCanvas.width / squareSize,
+                capturedCanvas.height / squareSize
+            );
+            const newWidth = squareSize * scale;
+            const newHeight = squareSize * scale;
+            const offsetX = (capturedCanvas.width - newWidth) / 2;
+            const offsetY = (capturedCanvas.height - newHeight) / 2;
+
+            // Draw from the video element instead of the canvas
+            capturedCtx.drawImage(
+                video, // Changed from 'canvas' to 'video'
+                sourceX, sourceY, squareSize, squareSize,
+                offsetX, offsetY, newWidth, newHeight
+            );
+        }
+
+        /** Import an image from file and display it on capturedCanvas */
+        function importImage(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onload = function() {
+                        capturedCtx.clearRect(0, 0, capturedCanvas.width, capturedCanvas.height);
+                        const scale = Math.min(capturedCanvas.width / img.width, capturedCanvas.height / img.height);
+                        const newWidth = img.width * scale;
+                        const newHeight = img.height * scale;
+                        const offsetX = (capturedCanvas.width - newWidth) / 2;
+                        const offsetY = (capturedCanvas.height - newHeight) / 2;
+                        capturedCtx.drawImage(img, offsetX, offsetY, newWidth, newHeight);
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        /** Clear the captured canvas */
+        function clearOutput() {
+            capturedCtx.clearRect(0, 0, capturedCanvas.width, capturedCanvas.height);
+        }
+
+        /** Placeholder for prediction functionality */
+        function predict() {
+            // Check if capturedCanvas has an image
+            const capturedImageData = capturedCtx.getImageData(0, 0, capturedCanvas.width, capturedCanvas.height);
+            const isEmpty = Array.from(capturedImageData.data).every(value => value === 0);
+            if (isEmpty) {
+                alert("Please capture an image first.");
+                return;
+            }
+
+            // Create a temporary canvas for resizing
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 224;
+            tempCanvas.height = 224;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            // Draw the captured image onto the temporary canvas, resizing to 224x224
+            tempCtx.drawImage(capturedCanvas, 0, 0, 224, 224);
+
+            // Get the resized image data
+            const resizedImageData = tempCtx.getImageData(0, 0, 224, 224);
+            const data = resizedImageData.data;
+
+            // Normalize the image data to [0,1] (RGB only, ignoring alpha)
+            const normalizedData = new Float32Array(224 * 224 * 3);
+            let idx = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                normalizedData[idx++] = data[i] / 255;     // Red
+                normalizedData[idx++] = data[i + 1] / 255; // Green
+                normalizedData[idx++] = data[i + 2] / 255; // Blue
+            }
+
+            // Log the result and notify the user
+            console.log("Normalized image data:", normalizedData);
+            alert("Image resized to 224x224 and normalized to [0,1]. Ready for prediction.");
+        }
+
+        /** Download the captured image */
+        function downloadImage() {
+            const imageData = capturedCtx.getImageData(0, 0, capturedCanvas.width, capturedCanvas.height);
+            const isEmpty = imageData.data.every(value => value === 0);
+            
+            if (isEmpty) {
+                alert("Nothing to download. Please capture an image first.");
+                return;
+            }
+
+            // Create a download link
+            const link = document.createElement('a');
+            link.download = 'captured-hand-sign.png';
+            link.href = capturedCanvas.toDataURL('image/png');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function captureAndDownload() {
+            captureHand();
+            downloadImage();
+        }
+
+        function downloadNormalizedData() {
+            // Assuming 'capturedCtx' is your canvas context
+            const imageData = capturedCtx.getImageData(0, 0, capturedCanvas.width, capturedCanvas.height);
+            const data = imageData.data;
+
+            // Check if the canvas has content
+            const isEmpty = Array.from(data).every(value => value === 0);
+            if (isEmpty) {
+                alert("No image to download. Please capture an image first.");
+                return;
+            }
+
+            // Normalize RGB values to [0,1]
+            const normalizedData = [];
+            for (let i = 0; i < data.length; i += 4) {
+                normalizedData.push(data[i] / 255);     // Red
+                normalizedData.push(data[i + 1] / 255); // Green
+                normalizedData.push(data[i + 2] / 255); // Blue
+                // Alpha channel is ignored
+            }
+
+            // Create a CSV string
+            const csvContent = normalizedData.join(',');
+
+            // Create a downloadable file
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'normalized_data.csv';
+            link.click();
+}
+
+        document.addEventListener("keydown", function(event) {
+            if (event.code === "Space") {
+                captureAndDownload();
+            }
+        });
+
+        startCamera();
+    </script>
+</body>
+</html>
