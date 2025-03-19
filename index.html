@@ -7,7 +7,7 @@
     <title>Sign Language Recognition</title>
 </head>
 <body>
-    <h1>Sign Language Recognition</h1>
+    <h1>Sign Language Recognition - dataset collection</h1>
 
     <div class="canvas-container">
         <!-- Left Side: Video Feed with Landmarks -->
@@ -22,10 +22,10 @@
         <!-- <button onclick="document.getElementById('fileInput').click()">Import Image</button> -->
         <!-- <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="importImage(event)"> -->
         <button onclick="clearOutput()">Clear</button>
-        <button onclick="predict()">Predict</button>
+        <!-- <button onclick="predict()">Predict</button> -->
         <button onclick="downloadImage()">Download</button> <!-- New Download Button -->
         <button onclick="captureAndDownload()">Capture & Download</button>
-        <button onclick="downloadNormalizedData()">Download Normalized Data</button>
+        <!-- <button onclick="downloadNormalizedData()">Download Normalized Data</button> -->
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
@@ -77,7 +77,7 @@
                 // Square Bounding Box
                 const width = maxX - minX;
                 const height = maxY - minY;
-                const squareSize = Math.max(width, height) + 45; // Add padding
+                const squareSize = Math.max(width, height) + 35; // Add padding
 
                 // Center square region for bounding
                 const centerX = (minX + maxX) / 2;
